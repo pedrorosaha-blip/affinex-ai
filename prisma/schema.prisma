@@ -6,11 +6,19 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum AuthProvider {
+  GOOGLE
+  APPLE
+}
+
 enum MarketplaceType {
   SHOPEE
   MERCADO_LIVRE
-  AMAZON
-  MAGALU
 }
 
 enum ConnectionStatus {
@@ -19,10 +27,35 @@ enum ConnectionStatus {
   ERROR
 }
 
+enum MarketplaceLogStatus {
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id         String       @id @default(uuid())
+  name       String?
+  email      String       @unique
+  imageUrl   String?
+  provider   AuthProvider
+  providerId String
+  role       UserRole     @default(USER)
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  marketplaceConnections MarketplaceConnection[]
+
+  @@unique([provider, providerId])
+  @@index([role])
+  @@index([isActive])
+}
+
 model MarketplaceConnection {
-  id               String            @id @default(uuid())
-  type             MarketplaceType   @unique
-  status           ConnectionStatus  @default(DISCONNECTED)
+  id               String           @id @default(uuid())
+  userId           String
+  type             MarketplaceType
+  status           ConnectionStatus @default(DISCONNECTED)
   apiKey           String?
   apiSecret        String?
   merchantId       String?
@@ -30,22 +63,34 @@ model MarketplaceConnection {
   refreshToken     String?
   expiresAt        DateTime?
   lastSyncAt       DateTime?
-  importedProducts Int               @default(0)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  logs             MarketplaceLog[]
+  importedProducts Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs MarketplaceLog[]
+
+  @@unique([userId, type])
+  @@index([userId])
+  @@index([type])
+  @@index([status])
 }
 
 model MarketplaceLog {
-  id           String                @id @default(uuid())
+  id           String               @id @default(uuid())
   connectionId String
-  connection   MarketplaceConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  action       String                // Ex: "CONNECT", "SYNC", "TEST"
-  status       String                // Ex: "SUCCESS", "FAILED"
+  action       String
+  status       MarketplaceLogStatus
   endpoint     String?
   statusCode   Int?
-  requestData  String?               // JSON stringified
-  responseData String?               // JSON stringified
+  requestData  Json?
+  responseData Json?
   errorMessage String?
-  createdAt    DateTime              @default(now())
+  createdAt    DateTime             @default(now())
+
+  connection MarketplaceConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+  @@index([status])
+  @@index([createdAt])
 }

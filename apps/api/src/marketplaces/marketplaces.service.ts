@@ -1,85 +1,154 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConnectionStatus,
+  MarketplaceLogStatus,
+  MarketplaceType,
+} from '@prisma/client';
+
 import { PrismaService } from '../prisma/prisma.service';
-import { MarketplaceType, ConnectionStatus } from '@prisma/client';
+
+type MarketplaceCredentials = {
+  apiKey?: string;
+  apiSecret?: string;
+  merchantId?: string;
+};
 
 @Injectable()
 export class MarketplacesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  // Listar todos os status e conexões
-  async findAll() {
+  async findAll(userId: string) {
     return this.prisma.marketplaceConnection.findMany({
+      where: {
+        userId,
+      },
       include: {
         logs: {
-          orderBy: { createdAt: 'desc' },
-          take: 5, // Traz os últimos 5 logs de cada marketplace
+          orderBy: {
+            createdAt: 'desc',
+          },
+          take: 5,
         },
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     });
   }
 
-  // Conectar ou atualizar credenciais de um marketplace
-  async connect(type: MarketplaceType, credentials: { apiKey?: string; apiSecret?: string; merchantId?: string }) {
+  async connect(
+    userId: string,
+    type: MarketplaceType,
+    credentials: MarketplaceCredentials,
+  ) {
     const connection = await this.prisma.marketplaceConnection.upsert({
-      where: { type },
+      where: {
+        userId_type: {
+          userId,
+          type,
+        },
+      },
       update: {
         ...credentials,
         status: ConnectionStatus.CONNECTED,
       },
       create: {
+        userId,
         type,
         ...credentials,
         status: ConnectionStatus.CONNECTED,
       },
     });
 
-    // Registra log de auditoria
     await this.prisma.marketplaceLog.create({
       data: {
         connectionId: connection.id,
         action: 'CONNECT',
-        status: 'SUCCESS',
-        responseData: JSON.stringify({ message: `Conexão estabelecida com ${type}` }),
+        status: MarketplaceLogStatus.SUCCESS,
+        responseData: {
+          message: `Conexão estabelecida com ${type}`,
+        },
       },
     });
 
     return connection;
   }
 
-  // Testar conexão
-  async testConnection(type: MarketplaceType) {
-    const connection = await this.prisma.marketplaceConnection.findUnique({ where: { type } });
+  async testConnection(userId: string, type: MarketplaceType) {
+    const connection =
+      await this.prisma.marketplaceConnection.findUnique({
+        where: {
+          userId_type: {
+            userId,
+            type,
+          },
+        },
+      });
 
     if (!connection) {
-      throw new NotFoundException(`Conexão com ${type} não encontrada.`);
+      throw new NotFoundException(
+        `Conexão com ${type} não encontrada.`,
+      );
     }
 
-    // Registra o teste nos logs
+    const connected =
+      connection.status === ConnectionStatus.CONNECTED;
+
     const log = await this.prisma.marketplaceLog.create({
       data: {
         connectionId: connection.id,
         action: 'TEST_CONNECTION',
-        status: connection.status === ConnectionStatus.CONNECTED ? 'SUCCESS' : 'FAILED',
-        statusCode: connection.status === ConnectionStatus.CONNECTED ? 200 : 400,
-        responseData: JSON.stringify({ status: connection.status }),
+        status: connected
+          ? MarketplaceLogStatus.SUCCESS
+          : MarketplaceLogStatus.FAILED,
+        statusCode: connected ? 200 : 400,
+        responseData: {
+          status: connection.status,
+        },
       },
     });
 
-    return { status: connection.status, log };
+    return {
+      status: connection.status,
+      log,
+    };
   }
 
-  // Desconectar marketplace
-  async disconnect(type: MarketplaceType) {
-    const connection = await this.prisma.marketplaceConnection.update({
-      where: { type },
-      data: { status: ConnectionStatus.DISCONNECTED },
-    });
+  async disconnect(userId: string, type: MarketplaceType) {
+    const existingConnection =
+      await this.prisma.marketplaceConnection.findUnique({
+        where: {
+          userId_type: {
+            userId,
+            type,
+          },
+        },
+      });
+
+    if (!existingConnection) {
+      throw new NotFoundException(
+        `Conexão com ${type} não encontrada.`,
+      );
+    }
+
+    const connection =
+      await this.prisma.marketplaceConnection.update({
+        where: {
+          userId_type: {
+            userId,
+            type,
+          },
+        },
+        data: {
+          status: ConnectionStatus.DISCONNECTED,
+        },
+      });
 
     await this.prisma.marketplaceLog.create({
       data: {
         connectionId: connection.id,
         action: 'DISCONNECT',
-        status: 'SUCCESS',
+        status: MarketplaceLogStatus.SUCCESS,
       },
     });
 

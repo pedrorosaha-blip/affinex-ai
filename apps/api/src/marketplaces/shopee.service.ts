@@ -40,11 +40,14 @@ export class ShopeeService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  private async getCredentials() {
+  private async getCredentials(userId: string) {
     const connection =
       await this.prisma.marketplaceConnection.findUnique({
         where: {
-          type: MarketplaceType.SHOPEE,
+          userId_type: {
+            userId,
+            type: MarketplaceType.SHOPEE,
+          },
         },
       });
 
@@ -79,8 +82,11 @@ export class ShopeeService {
       .digest('hex');
   }
 
-  async getOffers(keyword = 'oferta'): Promise<ShopeeOffer[]> {
-    const credentials = await this.getCredentials();
+  async getOffers(
+    userId: string,
+    keyword = 'oferta',
+  ): Promise<ShopeeOffer[]> {
+    const credentials = await this.getCredentials(userId);
     const timestamp = Math.floor(Date.now() / 1000);
 
     const query = `

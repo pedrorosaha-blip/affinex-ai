@@ -1,46 +1,80 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { MarketplaceType } from '@prisma/client';
+
+import { MarketplacesService } from './marketplaces.service';
 import { ShopeeService } from './shopee.service';
-import { MarketplaceType, ConnectionStatus } from '@prisma/client';
+
+type SaveShopeeConnectionBody = {
+  appKey: string;
+  appSecret: string;
+  appId?: string;
+};
 
 @Controller('marketplaces')
 export class MarketplacesController {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly marketplacesService: MarketplacesService,
     private readonly shopeeService: ShopeeService,
   ) {}
 
+  private getUserId(userId?: string): string {
+    if (!userId?.trim()) {
+      throw new BadRequestException(
+        'O cabeçalho x-user-id é obrigatório temporariamente.',
+      );
+    }
+
+    return userId.trim();
+  }
+
   @Get()
-  async getConnections() {
-    return this.prisma.marketplaceConnection.findMany();
+  async getConnections(
+    @Headers('x-user-id') userIdHeader?: string,
+  ) {
+    const userId = this.getUserId(userIdHeader);
+
+    return this.marketplacesService.findAll(userId);
   }
 
   @Get('shopee/products')
-  async getShopeeProducts(@Query('query') query?: string) {
-    return this.shopeeService.getOffers(query);
+  async getShopeeProducts(
+    @Headers('x-user-id') userIdHeader?: string,
+    @Query('query') query?: string,
+  ) {
+    const userId = this.getUserId(userIdHeader);
+
+    return this.shopeeService.getOffers(userId, query);
   }
 
   @Post('shopee')
-  async saveShopeeConnection(@Body() body: { appKey: string; appSecret: string; appId?: string }) {
-    const { appKey, appSecret, appId } = body;
+  async saveShopeeConnection(
+    @Headers('x-user-id') userIdHeader: string | undefined,
+    @Body() body: SaveShopeeConnectionBody,
+  ) {
+    const userId = this.getUserId(userIdHeader);
 
-    return this.prisma.marketplaceConnection.upsert({
-      where: {
-        type: MarketplaceType.SHOPEE,
+    if (!body.appKey?.trim() || !body.appSecret?.trim()) {
+      throw new BadRequestException(
+        'appKey e appSecret são obrigatórios.',
+      );
+    }
+
+    return this.marketplacesService.connect(
+      userId,
+      MarketplaceType.SHOPEE,
+      {
+        apiKey: body.appKey.trim(),
+        apiSecret: body.appSecret.trim(),
+        merchantId: body.appId?.trim() || undefined,
       },
-      update: {
-        apiKey: appKey,
-        apiSecret: appSecret,
-        merchantId: appId,
-        status: ConnectionStatus.CONNECTED,
-      },
-      create: {
-        type: MarketplaceType.SHOPEE,
-        apiKey: appKey,
-        apiSecret: appSecret,
-        merchantId: appId,
-        status: ConnectionStatus.CONNECTED,
-      },
-    });
+    );
   }
 }
