@@ -1,0 +1,43 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint --max-warnings 0",
+    "check-types": "next typegen && tsc --noEmit",
+    "worker": "node --import tsx lib/worker.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.0",
+    "@repo/ui": "*",
+    "axios": "^1.18.1",
+    "bullmq": "^5.41.0",
+    "clsx": "^2.1.1",
+    "dotenv": "^16.0.3",
+    "framer-motion": "^12.42.2",
+    "ioredis": "^5.4.1",
+    "lucide-react": "^1.26.0",
+    "next": "16.2.0",
+    "pg": "^8.22.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22.15.3",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "eslint": "^9.39.1",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.19.0",
+    "typescript": "5.9.2"
+  }
+}
